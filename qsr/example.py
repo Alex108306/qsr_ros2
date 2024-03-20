@@ -6,6 +6,7 @@ import os
 import rclpy
 import json
 import argparse
+import sys
 
 def load_json_file(path):
     with open(path, 'r') as f:
@@ -58,3 +59,53 @@ if __name__ == "__main__":
 
     # Parse arguments
     args = parser.parse_args()
+    
+    rclpy.init(args=sys.argv)
+    node = rclpy.create_node()
+    
+    r = ROSClient()
+    
+    if args.action == "create":
+        qsr_seq = load_files(args.input)
+        d = r.call_service(
+            HMMRepRequestCreate(
+                qsr_seq=qsr_seq,
+                qsr_type=args.qsr_type,
+                pseudo_transitions=args.pseudo_transitions,
+                lookup_table=load_json_file(args.lookup) if args.lookup != "" else None,
+                transition_matrix=load_json_file(args.trans) if args.trans != "" else None,
+                emission_matrix=load_json_file(args.emi) if args.emi != "" else None,
+                start_at_zero=args.start_at_zero
+            )
+        )
+        with open(args.output, 'w') as f: json.dump(d, f)
+        
+    elif args.action == "sample":
+        with open(args.input, 'r') as f: hmm = json.load(f)
+        s = r.call_service(
+            HMMRepRequestSample(
+                qsr_type=args.qsr_type,
+                dictionary=hmm,
+                max_length=args.max_length,
+                num_samples=args.num_samples,
+                lookup_table=load_json_file(args.lookup) if args.lookup != "" else None
+            )
+        )
+        try:
+            with open(args.output, 'w') as f: json.dump(s, f)
+        except TypeError:
+            print(s)
+
+    elif args.action == "loglikelihood":
+        with open(args.qsr_seq, 'r') as f: qsr_seq = json.load(f)
+        with open(args.input, 'r') as f: hmm = json.load(f)
+        l = r.call_service(
+            HMMRepRequestLogLikelihood(
+                qsr_type=args.qsr_type,
+                dictionary=hmm,
+                qsr_seq=qsr_seq,
+                lookup_table=load_json_file(args.lookup) if args.lookup != "" else None
+            )
+        )
+        print(l)
+    
